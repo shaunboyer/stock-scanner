@@ -1,0 +1,83 @@
+databases:
+  - name: stock-scanner-db
+    plan: free
+    databaseName: stock_scanner
+    user: stock_scanner
+
+services:
+  # API that the dashboard reads from — just serves rows out of Postgres,
+  # doesn't touch FMP/Claude, so it only needs the DB connection.
+  - type: web
+    name: stock-scanner-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: stock-scanner-db
+          property: connectionString
+
+  # Static dashboard
+  - type: web
+    name: stock-scanner-dashboard
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      # Resolved from Render at build/sync time instead of guessing the
+      # onrender.com URL — the guess breaks if "stock-scanner-api" is already
+      # taken by another Render account and gets a random suffix.
+      # frontend/src/api.js turns this into https://<host>/api at runtime.
+      - key: VITE_API_HOST
+        fromService:
+          type: web
+          name: stock-scanner-api
+          property: host
+
+  # Daily scan job — schedule below runs 30 min after US market close (4:30pm ET),
+  # written in UTC. Adjust for daylight saving as needed, or tighten/loosen later.
+  - type: cron
+    name: stock-scanner-daily-scan
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm run scan
+    schedule: "30 21 * * 1-5"
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: stock-scanner-db
+          property: connectionString
+      - key: FMP_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CLAUDE_MODEL
+        value: claude-sonnet-4-6
+      - key: PCT_FROM_52W_LOW_MAX
+        value: "15"
+      - key: PCT_DRAWDOWN_3M_MIN
+        value: "20"
+      # No market-wide screener on this FMP plan (confirmed — company-screener
+      # and batch-quote return no data on Basic). The scan checks this fixed
+      # list instead of "the market" — edit it to whatever you want covered.
+      # Leave unset to fall back to backend/data/watchlist.js's default list.
+      - key: WATCHLIST_TICKERS
+        value: ""
+      # Basic plan = 250 calls/day. runScan.js logs actual usage each run —
+      # check the cron job's logs and shrink WATCHLIST_TICKERS if you're over.
+      - key: MAX_DAILY_FMP_CALLS
+        value: "250"
+      - key: ENABLE_NEWS_AND_INSIDER
+        value: "false"
