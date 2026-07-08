@@ -84,6 +84,11 @@ export default function Dashboard() {
 
       {loading && <div className="loading-state">Loading scan…</div>}
       {error && <div className="empty-state">Couldn't load scan data — {error}</div>}
+      {!loading && !error && scanData === null && (
+        <div className="empty-state">
+          No scan has run yet. Trigger the cron job from Render's dashboard, or wait for the next scheduled run.
+        </div>
+      )}
       {!loading && !error && scanData?.results?.length === 0 && (
         <div className="empty-state">No names cleared both filters today.</div>
       )}

@@ -14,9 +14,13 @@ export async function fetchScanDates() {
   return res.json();
 }
 
+// Returns null if no scan exists yet (a normal, expected state before the
+// cron job's first run) rather than throwing — the caller distinguishes
+// "no data yet" from a real fetch failure.
 export async function fetchScan(date) {
   const path = date ? `${API_BASE}/scans/${date}` : `${API_BASE}/scans/latest`;
   const res = await fetch(path);
+  if (res.status === 404) return null;
   if (!res.ok) throw new Error("Failed to load scan");
   return res.json();
 }
