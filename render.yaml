@@ -44,10 +44,13 @@ services:
 
   # Daily scan job — schedule below runs 30 min after US market close (4:30pm ET),
   # written in UTC. Adjust for daylight saving as needed, or tighten/loosen later.
+  # Cron jobs have no free tier on Render (Starter is the smallest available
+  # instance type) — billed per second while running, ~$1/mo minimum given
+  # how briefly this job runs.
   - type: cron
     name: stock-scanner-daily-scan
     runtime: node
-    plan: free
+    plan: starter
     rootDir: backend
     buildCommand: npm install
     startCommand: npm run scan
