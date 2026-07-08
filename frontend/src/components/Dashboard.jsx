@@ -84,11 +84,11 @@ export default function Dashboard() {
 
       {loading && <div className="loading-state">Loading scan…</div>}
       {error && <div className="empty-state">Couldn't load scan data — {error}</div>}
-      {!loading && !error && scanData && scanData.results.length === 0 && (
+      {!loading && !error && scanData?.results?.length === 0 && (
         <div className="empty-state">No names cleared both filters today.</div>
       )}
 
-      {!loading && !error && scanData && scanData.results.length > 0 && (
+      {!loading && !error && scanData?.results?.length > 0 && (
         <table className="table">
           <thead>
             <tr>

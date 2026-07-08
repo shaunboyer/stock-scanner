@@ -15,7 +15,7 @@ export async function fetchScanDates() {
 }
 
 export async function fetchScan(date) {
-  const path = date ? `${API_BASE}/scans/${date}` : `${API_BASE}/scans/`;
+  const path = date ? `${API_BASE}/scans/${date}` : `${API_BASE}/scans/latest`;
   const res = await fetch(path);
   if (!res.ok) throw new Error("Failed to load scan");
   return res.json();

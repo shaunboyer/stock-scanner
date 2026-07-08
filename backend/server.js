@@ -23,11 +23,9 @@ app.get("/api/scans", async (req, res) => {
   }
 });
 
-// Get the shortlist for a given date (defaults to most recent).
-app.get("/api/scans/:date?", async (req, res) => {
+// Shared logic for both "latest" and "specific date" lookups below.
+async function sendScanPayload(res, date) {
   try {
-    const { date } = req.params;
-
     const scanQuery = date
       ? `SELECT * FROM scans WHERE scan_date = $1`
       : `SELECT * FROM scans ORDER BY scan_date DESC LIMIT 1`;
@@ -49,7 +47,17 @@ app.get("/api/scans/:date?", async (req, res) => {
     console.error(err);
     res.status(500).json({ error: "Failed to load scan" });
   }
-});
+}
+
+// NOTE: these are two distinct paths on purpose, not "/api/scans/:date?".
+// Express treats "/api/scans/" (trailing slash, no date) as the same route
+// as "/api/scans" under its default non-strict routing — since "/api/scans"
+// is registered above, it was winning the match and returning the dates
+// list instead of a scan payload whenever the frontend asked for "no date
+// selected" (i.e. on every normal page load). Splitting into /latest and
+// /:date removes the ambiguity.
+app.get("/api/scans/latest", (req, res) => sendScanPayload(res, null));
+app.get("/api/scans/:date", (req, res) => sendScanPayload(res, req.params.date));
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 
