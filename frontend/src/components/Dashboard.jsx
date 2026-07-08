@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { fetchScanDates, fetchScan } from "../api.js";
+import React, { useEffect, useRef, useState } from "react";
+import { fetchScanDates, fetchScan, triggerScan, fetchScanStatus } from "../api.js";
 import QualityBar from "./QualityBar.jsx";
 import DetailPanel from "./DetailPanel.jsx";
 
@@ -26,21 +26,68 @@ export default function Dashboard() {
   const [expandedTicker, setExpandedTicker] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [scanRunning, setScanRunning] = useState(false);
+  const [scanRunError, setScanRunError] = useState(null);
+  const pollRef = useRef(null);
 
-  useEffect(() => {
+  function loadDates() {
     fetchScanDates()
       .then((d) => setDates(d))
       .catch(() => {});
-  }, []);
+  }
 
-  useEffect(() => {
+  function loadScan() {
     setLoading(true);
     setError(null);
     fetchScan(selectedDate)
       .then((data) => setScanData(data))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [selectedDate]);
+  }
+
+  useEffect(loadDates, []);
+  useEffect(loadScan, [selectedDate]);
+
+  // Pick up an in-progress scan (e.g. the cron job, or another browser tab)
+  // on load, so the button reflects reality instead of always starting idle.
+  useEffect(() => {
+    fetchScanStatus()
+      .then((status) => {
+        if (status.running) startPolling();
+      })
+      .catch(() => {});
+    return () => clearInterval(pollRef.current);
+  }, []);
+
+  function startPolling() {
+    setScanRunning(true);
+    setScanRunError(null);
+    clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const status = await fetchScanStatus();
+        if (!status.running) {
+          clearInterval(pollRef.current);
+          setScanRunning(false);
+          if (status.error) setScanRunError(status.error);
+          loadDates();
+          loadScan();
+        }
+      } catch {
+        // transient — keep polling
+      }
+    }, 3000);
+  }
+
+  async function handleRunScan() {
+    setScanRunError(null);
+    try {
+      await triggerScan();
+      startPolling();
+    } catch (err) {
+      setScanRunError(err.message);
+    }
+  }
 
   return (
     <div className="app">
@@ -79,9 +126,13 @@ export default function Dashboard() {
               </option>
             ))}
           </select>
+          <button className="run-scan-btn" onClick={handleRunScan} disabled={scanRunning}>
+            {scanRunning ? "Scanning…" : "Run scan now"}
+          </button>
         </div>
       </div>
 
+      {scanRunError && <div className="empty-state">Scan run failed — {scanRunError}</div>}
       {loading && <div className="loading-state">Loading scan…</div>}
       {error && <div className="empty-state">Couldn't load scan data — {error}</div>}
       {!loading && !error && scanData === null && (

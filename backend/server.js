@@ -2,12 +2,18 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { pool } from "./db/pool.js";
+import { runScan } from "./scan/runScan.js";
 
 dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// In-memory only (fine for a single-instance free-tier service) — guards
+// against overlapping runs if someone double-clicks "Run scan now", and
+// gives the frontend something to poll while a run is in progress.
+let scanState = { running: false, startedAt: null, finishedAt: null, error: null, result: null };
 
 // List available scan dates, most recent first.
 app.get("/api/scans", async (req, res) => {
@@ -58,6 +64,31 @@ async function sendScanPayload(res, date) {
 // /:date removes the ambiguity.
 app.get("/api/scans/latest", (req, res) => sendScanPayload(res, null));
 app.get("/api/scans/:date", (req, res) => sendScanPayload(res, req.params.date));
+
+// Manual "run scan now" — fires the scan in the background and returns
+// immediately (a full run takes anywhere from several seconds to a couple
+// minutes depending on watchlist size, too long to hold an HTTP request
+// open reliably). Frontend polls /api/scan/status to know when it's done.
+app.post("/api/scan/trigger", (req, res) => {
+  if (scanState.running) {
+    return res.status(409).json({ error: "A scan is already running", scanState });
+  }
+
+  scanState = { running: true, startedAt: new Date().toISOString(), finishedAt: null, error: null, result: null };
+
+  runScan()
+    .then((result) => {
+      scanState = { ...scanState, running: false, finishedAt: new Date().toISOString(), result };
+    })
+    .catch((err) => {
+      console.error("[scan/trigger] failed:", err);
+      scanState = { ...scanState, running: false, finishedAt: new Date().toISOString(), error: err.message };
+    });
+
+  res.status(202).json({ started: true, scanState });
+});
+
+app.get("/api/scan/status", (req, res) => res.json(scanState));
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 

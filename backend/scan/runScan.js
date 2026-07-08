@@ -25,7 +25,12 @@ function getWatchlist() {
   return DEFAULT_WATCHLIST;
 }
 
-async function main() {
+// Exported so both the CLI entrypoint below (for the Render cron job) and
+// the API service's manual "run scan now" endpoint can call the same logic.
+// IMPORTANT: does not call pool.end() — the API service shares this pool
+// with its own long-running queries and must not close it out from under
+// itself. The CLI wrapper below handles pool.end() for the standalone case.
+export async function runScan() {
   console.log("[scan] starting daily scan...");
   const today = new Date().toISOString().slice(0, 10);
 
@@ -199,16 +204,31 @@ async function main() {
     const callsUsed = getCallCount();
     const budgetNote = callsUsed > MAX_DAILY_FMP_CALLS ? " — OVER BUDGET, trim WATCHLIST_TICKERS" : "";
     console.log(`[scan] FMP calls used this run: ${callsUsed} / ${MAX_DAILY_FMP_CALLS} daily budget${budgetNote}`);
+
+    return {
+      scanDate: today,
+      watchlistSize: watchlist.length,
+      triggeredCount: triggered.length,
+      shortlistedCount: withStreaks.length,
+      fmpCallsUsed: callsUsed,
+    };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
   } finally {
     client.release();
-    await pool.end();
   }
 }
 
-main().catch((err) => {
-  console.error("[scan] failed:", err);
-  process.exit(1);
-});
+// CLI entrypoint — only runs when this file is executed directly (`npm run
+// scan`, i.e. the Render cron job), not when imported by server.js.
+const isDirectRun = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+if (isDirectRun) {
+  runScan()
+    .then(() => pool.end())
+    .catch(async (err) => {
+      console.error("[scan] failed:", err);
+      await pool.end();
+      process.exit(1);
+    });
+}

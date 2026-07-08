@@ -24,3 +24,19 @@ export async function fetchScan(date) {
   if (!res.ok) throw new Error("Failed to load scan");
   return res.json();
 }
+
+// Kicks off a scan in the background; the API responds as soon as it starts
+// (202), not when it finishes — poll fetchScanStatus() to know when it's done.
+// Throws with the server's message on a 409 (already running).
+export async function triggerScan() {
+  const res = await fetch(`${API_BASE}/scan/trigger`, { method: "POST" });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || "Failed to start scan");
+  return body;
+}
+
+export async function fetchScanStatus() {
+  const res = await fetch(`${API_BASE}/scan/status`);
+  if (!res.ok) throw new Error("Failed to load scan status");
+  return res.json();
+}

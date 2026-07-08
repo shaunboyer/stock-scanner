@@ -99,6 +99,28 @@ body {
   border-color: var(--accent-dim);
 }
 
+.run-scan-btn {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-dim);
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.run-scan-btn:hover:not(:disabled) {
+  background: var(--accent);
+}
+
+.run-scan-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .stat-pill {
   display: flex;
   flex-direction: column;
